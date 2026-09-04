@@ -1,47 +1,70 @@
 import { io } from 'socket.io-client';
 import { shouldUpdateLocation } from './hooks/useGeolocation';
+import './style.css';
 
-const SERVER_URL = 'https://bang-2.onrender.com'; // Change to deployed URL later
+const SERVER_URL = 'https://bang-2.onrender.com';
 const socket = io(SERVER_URL);
 
 let lastSentLocation: { latitude: number; longitude: number } | null = null;
 let lastSentTime: number | null = null;
 let watchId: number | null = null;
 
-const appDiv = document.createElement('div');
-appDiv.style.fontFamily = 'sans-serif';
-appDiv.style.padding = '20px';
-appDiv.style.textAlign = 'center';
-appDiv.style.color = '#666';
-document.body.appendChild(appDiv);
+// --- UI CONSTRUCTION ---
+const appContainer = document.createElement('div');
+appContainer.id = 'app-container';
+document.body.appendChild(appContainer);
 
-const statusEl = document.createElement('p');
-statusEl.style.fontSize = '12px';
-statusEl.textContent = 'Checking system status...';
-appDiv.appendChild(statusEl);
+const configCard = document.createElement('div');
+configCard.className = 'config-card';
+appContainer.appendChild(configCard);
 
-// Formulario de configuración (solo se muestra si no hay datos guardados)
-const configDiv = document.createElement('div');
-configDiv.style.display = 'none';
-appDiv.appendChild(configDiv);
+const cardHeader = document.createElement('div');
+cardHeader.className = 'card-header';
+cardHeader.innerHTML = `
+  <h1>📍 Child Tracker</h1>
+  <p>Secure real-time location sharing</p>
+`;
+configCard.appendChild(cardHeader);
 
-const familyInput = document.createElement('input');
-familyInput.placeholder = 'Family ID';
-familyInput.style.display = 'block';
-familyInput.style.margin = '10px auto';
-configDiv.appendChild(familyInput);
+const inputGroup = document.createElement('div');
+inputGroup.className = 'input-group';
 
-const childIdInput = document.createElement('input');
-childIdInput.placeholder = 'Child ID';
-childIdInput.style.display = 'block';
-childIdInput.style.margin = '10px auto';
-configDiv.appendChild(childIdInput);
+const familyField = document.createElement('div');
+familyField.className = 'field';
+familyField.innerHTML = `
+  <label>Family ID</label>
+  <input type="text" id="family-id" class="styled-input" placeholder="Enter family ID...">
+`;
+inputGroup.appendChild(familyField);
+
+const childField = document.createElement('div');
+childField.className = 'field';
+childField.innerHTML = `
+  <label>Child ID</label>
+  <input type="text" id="child-id" class="styled-input" placeholder="Enter your ID...">
+`;
+inputGroup.appendChild(childField);
+
+configCard.appendChild(inputGroup);
 
 const saveBtn = document.createElement('button');
+saveBtn.className = 'btn-primary';
 saveBtn.textContent = 'Activate Service';
-saveBtn.style.padding = '10px 20px';
-configDiv.appendChild(saveBtn);
+configCard.appendChild(saveBtn);
 
+const statusContainer = document.createElement('div');
+statusContainer.className = 'status-container';
+statusContainer.style.display = 'none';
+configCard.appendChild(statusContainer);
+
+function updateStatusUI(isActive: boolean) {
+  statusContainer.style.display = 'block';
+  statusContainer.innerHTML = isActive
+    ? `<div class="status-badge status-active"><div class="status-dot dot-active"></div>System Active: Monitoring</div>`
+    : `<div class="status-badge status-inactive"><div class="status-dot dot-inactive"></div>System Inactive</div>`;
+}
+
+// --- LOGIC ---
 function startTracking(familyId: string, childId: string) {
   socket.emit('join_family', { familyId, role: 'child', userId: childId });
 
@@ -65,7 +88,7 @@ function startTracking(familyId: string, childId: string) {
       },
       (error) => {
         console.error('Geolocation error:', error);
-        statusEl.textContent = 'System Error: GPS Off';
+        updateStatusUI(false);
       },
       {
         enableHighAccuracy: true,
@@ -74,15 +97,17 @@ function startTracking(familyId: string, childId: string) {
       }
     );
 
-    statusEl.textContent = 'System Active: Monitoring enabled';
+    updateStatusUI(true);
   } else {
-    statusEl.textContent = 'System Error: GPS Not Supported';
+    updateStatusUI(false);
   }
 }
 
 saveBtn.onclick = () => {
+  const familyInput = document.getElementById('family-id') as HTMLInputElement;
+  const childInput = document.getElementById('child-id') as HTMLInputElement;
   const familyId = familyInput.value;
-  const childId = childIdInput.value;
+  const childId = childInput.value;
 
   if (!familyId || !childId) {
     alert('Configuration required');
@@ -92,7 +117,6 @@ saveBtn.onclick = () => {
   localStorage.setItem('familyId', familyId);
   localStorage.setItem('childId', childId);
 
-  configDiv.style.display = 'none';
   startTracking(familyId, childId);
 };
 
@@ -103,6 +127,6 @@ const savedChildId = localStorage.getItem('childId');
 if (savedFamilyId && savedChildId) {
   startTracking(savedFamilyId, savedChildId);
 } else {
-  configDiv.style.display = 'block';
-  statusEl.textContent = 'Configuration Required';
+  // Show input group, hide status
+  statusContainer.style.display = 'none';
 }
