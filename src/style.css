@@ -27,7 +27,7 @@ body, html {
 }
 
 .card-header {
-  margin-bottom: 24px;
+  margin-bottom: 20px;
 }
 
 .card-header h1 {
@@ -43,11 +43,36 @@ body, html {
   margin-top: 8px;
 }
 
+/* Connection bar */
+.connection-bar {
+  padding: 8px 12px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  transition: all 0.3s;
+}
+
+.connection-connected {
+  background-color: #dcfce7;
+  color: #166534;
+}
+
+.connection-disconnected {
+  background-color: #fef3c7;
+  color: #92400e;
+}
+
+/* Config form */
+.config-form {
+  text-align: left;
+}
+
 .input-group {
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   text-align: left;
 }
 
@@ -79,6 +104,11 @@ body, html {
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
 }
 
+.button-group {
+  display: flex;
+  gap: 8px;
+}
+
 .btn-primary {
   width: 100%;
   background-color: #3b82f6;
@@ -96,17 +126,66 @@ body, html {
   background-color: #2563eb;
 }
 
-.status-container {
-  margin-top: 24px;
-  padding-top: 24px;
-  border-top: 1px solid #e2e8f0;
+.btn-danger {
+  width: 100%;
+  background-color: #ef4444;
+  color: white;
+  border: none;
+  padding: 12px;
+  border-radius: 8px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background-color 0.2s;
+  margin-top: 16px;
 }
 
+.btn-danger:hover {
+  background-color: #dc2626;
+}
+
+/* Tracking panel */
+.tracking-panel {
+  text-align: left;
+}
+
+.tracking-info {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 13px;
+}
+
+.info-row + .info-row {
+  border-top: 1px solid #f1f5f9;
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+.info-label {
+  color: #64748b;
+  font-weight: 500;
+}
+
+.info-value {
+  color: #1e293b;
+  font-weight: 600;
+}
+
+/* Status badges */
 .status-badge {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 6px 12px;
+  padding: 8px 14px;
   border-radius: 9999px;
   font-size: 13px;
   font-weight: 500;
@@ -117,22 +196,44 @@ body, html {
   color: #166534;
 }
 
-.status-inactive {
-  background-color: #f1f5f9;
-  color: #475569;
+.status-error {
+  background-color: #fee2e2;
+  color: #991b1b;
 }
 
 .status-dot {
-  width: 6px;
-  height: 6px;
+  width: 8px;
+  height: 8px;
   border-radius: 50%;
 }
 
 .dot-active {
   background-color: #22c55e;
-  box-shadow: 0 0 0 2px rgba(34, 197, 94, 0.2);
+  box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.2);
+  animation: pulse-dot 2s infinite;
 }
 
-.dot-inactive {
-  background-color: #94a3b8;
+.dot-error {
+  background-color: #ef4444;
+  box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.2);
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+/* Mobile */
+@media (max-width: 480px) {
+  #app-container {
+    padding: 12px;
+  }
+
+  .config-card {
+    padding: 24px 20px;
+  }
+
+  .card-header h1 {
+    font-size: 20px;
+  }
 }

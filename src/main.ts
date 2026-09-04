@@ -1,15 +1,17 @@
-import { io } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 import { shouldUpdateLocation } from './hooks/useGeolocation';
 import './style.css';
 
 const SERVER_URL = 'https://bang-2.onrender.com';
-const socket = io(SERVER_URL);
+const socket: Socket = io(SERVER_URL, { reconnection: true, reconnectionDelay: 3000 });
 
 let lastSentLocation: { latitude: number; longitude: number } | null = null;
 let lastSentTime: number | null = null;
 let watchId: number | null = null;
+let trackingActive = false;
+let locationCount = 0;
 
-// --- UI CONSTRUCTION ---
+// --- DOM ELEMENTS ---
 const appContainer = document.createElement('div');
 appContainer.id = 'app-container';
 document.body.appendChild(appContainer);
@@ -21,10 +23,20 @@ appContainer.appendChild(configCard);
 const cardHeader = document.createElement('div');
 cardHeader.className = 'card-header';
 cardHeader.innerHTML = `
-  <h1>📍 Child Tracker</h1>
+  <h1>&#x1F4CD; Child Tracker</h1>
   <p>Secure real-time location sharing</p>
 `;
 configCard.appendChild(cardHeader);
+
+// Connection status bar
+const connectionBar = document.createElement('div');
+connectionBar.className = 'connection-bar connection-disconnected';
+connectionBar.textContent = 'Connecting...';
+configCard.appendChild(connectionBar);
+
+// Config form
+const configForm = document.createElement('div');
+configForm.className = 'config-form';
 
 const inputGroup = document.createElement('div');
 inputGroup.className = 'input-group';
@@ -45,28 +57,73 @@ childField.innerHTML = `
 `;
 inputGroup.appendChild(childField);
 
-configCard.appendChild(inputGroup);
+configForm.appendChild(inputGroup);
+
+const buttonGroup = document.createElement('div');
+buttonGroup.className = 'button-group';
 
 const saveBtn = document.createElement('button');
 saveBtn.className = 'btn-primary';
 saveBtn.textContent = 'Activate Service';
-configCard.appendChild(saveBtn);
+buttonGroup.appendChild(saveBtn);
 
-const statusContainer = document.createElement('div');
-statusContainer.className = 'status-container';
-statusContainer.style.display = 'none';
-configCard.appendChild(statusContainer);
+configForm.appendChild(buttonGroup);
+configCard.appendChild(configForm);
 
-function updateStatusUI(isActive: boolean) {
-  statusContainer.style.display = 'block';
-  statusContainer.innerHTML = isActive
-    ? `<div class="status-badge status-active"><div class="status-dot dot-active"></div>System Active: Monitoring</div>`
-    : `<div class="status-badge status-inactive"><div class="status-dot dot-inactive"></div>System Inactive</div>`;
+// Active tracking panel (hidden by default)
+const trackingPanel = document.createElement('div');
+trackingPanel.className = 'tracking-panel';
+trackingPanel.style.display = 'none';
+configCard.appendChild(trackingPanel);
+
+const trackingInfo = document.createElement('div');
+trackingInfo.className = 'tracking-info';
+trackingPanel.appendChild(trackingInfo);
+
+const statusBadge = document.createElement('div');
+statusBadge.className = 'status-badge';
+trackingPanel.appendChild(statusBadge);
+
+const stopBtn = document.createElement('button');
+stopBtn.className = 'btn-danger';
+stopBtn.textContent = 'Stop Tracking';
+trackingPanel.appendChild(stopBtn);
+
+// --- STATUS UPDATE FUNCTIONS ---
+function updateConnectionStatus(connected: boolean) {
+  connectionBar.className = `connection-bar ${connected ? 'connection-connected' : 'connection-disconnected'}`;
+  connectionBar.textContent = connected ? 'Connected to server' : 'Reconnecting...';
 }
 
-// --- LOGIC ---
+function showTrackingPanel(familyId: string, childId: string) {
+  configForm.style.display = 'none';
+  trackingPanel.style.display = 'block';
+  updateTrackingInfo(familyId, childId);
+}
+
+function updateTrackingInfo(familyId: string, childId: string) {
+  trackingInfo.innerHTML = `
+    <div class="info-row"><span class="info-label">Family:</span> <span class="info-value">${familyId}</span></div>
+    <div class="info-row"><span class="info-label">Child:</span> <span class="info-value">${childId}</span></div>
+    <div class="info-row"><span class="info-label">Updates sent:</span> <span class="info-value" id="update-count">${locationCount}</span></div>
+  `;
+  statusBadge.className = 'status-badge status-active';
+  statusBadge.innerHTML = '<div class="status-dot dot-active"></div>Tracking Active';
+}
+
+function showConfigForm() {
+  configForm.style.display = 'block';
+  trackingPanel.style.display = 'none';
+}
+
+// --- TRACKING LOGIC ---
 function startTracking(familyId: string, childId: string) {
+  if (trackingActive) return;
+
   socket.emit('join_family', { familyId, role: 'child', userId: childId });
+  trackingActive = true;
+  locationCount = 0;
+  showTrackingPanel(familyId, childId);
 
   if ('geolocation' in navigator) {
     watchId = navigator.geolocation.watchPosition(
@@ -84,41 +141,74 @@ function startTracking(familyId: string, childId: string) {
 
           lastSentLocation = currentPos;
           lastSentTime = Date.now();
+          locationCount++;
+
+          const countEl = document.getElementById('update-count');
+          if (countEl) countEl.textContent = String(locationCount);
         }
       },
       (error) => {
         console.error('Geolocation error:', error);
-        updateStatusUI(false);
+        statusBadge.className = 'status-badge status-error';
+        statusBadge.innerHTML = '<div class="status-dot dot-error"></div>GPS Error - Check permissions';
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 0
+        timeout: 15000,
+        maximumAge: 10000
       }
     );
-
-    updateStatusUI(true);
   } else {
-    updateStatusUI(false);
+    statusBadge.className = 'status-badge status-error';
+    statusBadge.innerHTML = '<div class="status-dot dot-error"></div>Geolocation not supported';
   }
 }
 
+function stopTracking() {
+  if (watchId !== null) {
+    navigator.geolocation.clearWatch(watchId);
+    watchId = null;
+  }
+  trackingActive = false;
+  lastSentLocation = null;
+  lastSentTime = null;
+  locationCount = 0;
+  showConfigForm();
+}
+
+// --- EVENT HANDLERS ---
 saveBtn.onclick = () => {
   const familyInput = document.getElementById('family-id') as HTMLInputElement;
   const childInput = document.getElementById('child-id') as HTMLInputElement;
-  const familyId = familyInput.value;
-  const childId = childInput.value;
+  const familyId = familyInput.value.trim();
+  const childId = childInput.value.trim();
 
   if (!familyId || !childId) {
-    alert('Configuration required');
+    alert('Please fill in both fields');
     return;
   }
 
   localStorage.setItem('familyId', familyId);
   localStorage.setItem('childId', childId);
-
   startTracking(familyId, childId);
 };
+
+stopBtn.onclick = () => {
+  localStorage.removeItem('familyId');
+  localStorage.removeItem('childId');
+  stopTracking();
+};
+
+// Socket events
+socket.on('connect', () => updateConnectionStatus(true));
+socket.on('disconnect', () => updateConnectionStatus(false));
+socket.on('connect_error', () => updateConnectionStatus(false));
+
+socket.on('error', (data: { message: string }) => {
+  console.error('Server error:', data.message);
+  statusBadge.className = 'status-badge status-error';
+  statusBadge.innerHTML = `<div class="status-dot dot-error"></div>Error: ${data.message}`;
+});
 
 // Auto-start if configured
 const savedFamilyId = localStorage.getItem('familyId');
@@ -126,7 +216,4 @@ const savedChildId = localStorage.getItem('childId');
 
 if (savedFamilyId && savedChildId) {
   startTracking(savedFamilyId, savedChildId);
-} else {
-  // Show input group, hide status
-  statusContainer.style.display = 'none';
 }
