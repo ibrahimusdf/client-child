@@ -3,13 +3,15 @@ import { shouldUpdateLocation } from './hooks/useGeolocation';
 import './style.css';
 
 const SERVER_URL = 'https://bang-2.onrender.com';
-const socket: Socket = io(SERVER_URL, { reconnection: true, reconnectionDelay: 3000 });
+const socket: Socket = io(SERVER_URL, { reconnection: true, reconnectionDelay: 3000, reconnectionAttempts: Infinity });
 
 let lastSentLocation: { latitude: number; longitude: number } | null = null;
 let lastSentTime: number | null = null;
 let watchId: number | null = null;
 let trackingActive = false;
 let locationCount = 0;
+let savedFamilyId: string | null = null;
+let savedChildId: string | null = null;
 
 // --- DOM ELEMENTS ---
 const appContainer = document.createElement('div');
@@ -86,10 +88,10 @@ trackingPanel.appendChild(statusBadge);
 
 const stopBtn = document.createElement('button');
 stopBtn.className = 'btn-danger';
-stopBtn.textContent = 'Stop Tracking';
+stopBtn.textContent = 'Stop & Forget';
 trackingPanel.appendChild(stopBtn);
 
-// --- STATUS UPDATE FUNCTIONS ---
+// --- UI ---
 function updateConnectionStatus(connected: boolean) {
   connectionBar.className = `connection-bar ${connected ? 'connection-connected' : 'connection-disconnected'}`;
   connectionBar.textContent = connected ? 'Connected to server' : 'Reconnecting...';
@@ -98,10 +100,6 @@ function updateConnectionStatus(connected: boolean) {
 function showTrackingPanel(familyId: string, childId: string) {
   configForm.style.display = 'none';
   trackingPanel.style.display = 'block';
-  updateTrackingInfo(familyId, childId);
-}
-
-function updateTrackingInfo(familyId: string, childId: string) {
   trackingInfo.innerHTML = `
     <div class="info-row"><span class="info-label">Family:</span> <span class="info-value">${familyId}</span></div>
     <div class="info-row"><span class="info-label">Child:</span> <span class="info-value">${childId}</span></div>
@@ -116,13 +114,20 @@ function showConfigForm() {
   trackingPanel.style.display = 'none';
 }
 
-// --- TRACKING LOGIC ---
+// --- TRACKING ---
+function joinSocket(familyId: string, childId: string) {
+  socket.emit('join_family', { familyId, role: 'child', userId: childId });
+}
+
 function startTracking(familyId: string, childId: string) {
   if (trackingActive) return;
 
-  socket.emit('join_family', { familyId, role: 'child', userId: childId });
+  savedFamilyId = familyId;
+  savedChildId = childId;
   trackingActive = true;
   locationCount = 0;
+
+  joinSocket(familyId, childId);
   showTrackingPanel(familyId, childId);
 
   if ('geolocation' in navigator) {
@@ -173,6 +178,10 @@ function stopTracking() {
   lastSentLocation = null;
   lastSentTime = null;
   locationCount = 0;
+  savedFamilyId = null;
+  savedChildId = null;
+  localStorage.removeItem('familyId');
+  localStorage.removeItem('childId');
   showConfigForm();
 }
 
@@ -193,26 +202,31 @@ saveBtn.onclick = () => {
   startTracking(familyId, childId);
 };
 
-stopBtn.onclick = () => {
-  localStorage.removeItem('familyId');
-  localStorage.removeItem('childId');
-  stopTracking();
-};
+stopBtn.onclick = () => stopTracking();
 
-// Socket events
-socket.on('connect', () => updateConnectionStatus(true));
+// --- SOCKET EVENTS ---
+socket.on('connect', () => {
+  updateConnectionStatus(true);
+  // Re-join family on reconnect
+  if (savedFamilyId && savedChildId) {
+    joinSocket(savedFamilyId, savedChildId);
+  }
+});
+
 socket.on('disconnect', () => updateConnectionStatus(false));
 socket.on('connect_error', () => updateConnectionStatus(false));
 
 socket.on('error', (data: { message: string }) => {
   console.error('Server error:', data.message);
-  statusBadge.className = 'status-badge status-error';
-  statusBadge.innerHTML = `<div class="status-dot dot-error"></div>Error: ${data.message}`;
+  if (trackingActive) {
+    statusBadge.className = 'status-badge status-error';
+    statusBadge.innerHTML = `<div class="status-dot dot-error"></div>Error: ${data.message}`;
+  }
 });
 
-// Auto-start if configured
-const savedFamilyId = localStorage.getItem('familyId');
-const savedChildId = localStorage.getItem('childId');
+// --- AUTO-START ---
+savedFamilyId = localStorage.getItem('familyId');
+savedChildId = localStorage.getItem('childId');
 
 if (savedFamilyId && savedChildId) {
   startTracking(savedFamilyId, savedChildId);
