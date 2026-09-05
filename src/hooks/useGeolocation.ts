@@ -30,8 +30,8 @@ export function shouldUpdateLocation(
   const now = Date.now();
   const timeElapsed = now - lastSentTime;
 
-  // Thresholds: 20 meters or 5 minutes (300,000 ms)
-  if (distance > 20 || timeElapsed > 300000) {
+  // Thresholds: 1 meter or 10 seconds (10,000 ms)
+  if (distance > 1 || timeElapsed > 10000) {
     return true;
   }
 
